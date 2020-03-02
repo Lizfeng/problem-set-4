@@ -1,0 +1,242 @@
+---
+title: 'MACS 33002: Homework #4'
+author: "Xin Feng"
+date: "Due Monday, Mar 2nd by 5pm"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+geometry: margin=0.75in
+fontsize: 12pt
+fig_crop: no
+---
+
+
+```{r echo=FALSE}
+library(tidyverse)
+library(knitr)
+library(skimr)
+library(dendextend)
+library(mixtools)
+library(plotGMM)
+options(width=70, digits=4, scipen=8)
+knitr::opts_chunk$set(size='small') # Set the default R output size a bit smaller
+```
+
+### Performing k-Means By Hand
+
+In this first part of the problem set, your goal is to gain a deeper conceptual understanding of the iterative process of k-means, which operates by initializing random cluster assignments, then updates cluster centroids, then cluster assignments, and so on, until convergence, which is defined by no furtehr changes to cluster configurations (i.e., optimal clusters definined by minimum sums of squares *within* clusters, and maximum sums of squares *between* clusters. 
+
+In short, then, by answering each of the following questions, you will be performing k-means clustering "by hand" to see and demonstrate this iterative process. Your simulated data includes `n = 6` observations and `p = 2` features, and you should set the number of clusters, `k`, equal to two (i.e., you are hunting for 2 clusters within these data). I will get you started with the observations in the set. Run the following line to create your simulated data:
+
+1. (5 points) Plot the observations.
+```{r}
+x <- cbind(c(1, 1, 0, 5, 6, 4), c(4, 3, 4, 1, 2, 0))
+plot(x)
+```
+
+
+2. (5 points) Randomly assign a cluster label to each observation. Report the cluster labels for each observation *and* plot the results with a different color for each cluster (*remember to set your seed first*).
+
+```{r}
+set.seed(100)
+labels <- sample(2, nrow(x), replace = T)
+labels
+plot(x[, 1], x[, 2], col = (labels + 1), pch = 20, cex = 2)
+```
+
+##Points (1, 4), (0, 4), (5, 1) are labeled as [2, ]. The rest of the points are labeled as [1, ]. In the plot, label 2 is color green, label 1 is color red. 
+
+3. (10 points) Compute the centroid for each cluster.
+
+```{r}
+centroid1 <- c(mean(x[labels == 1, 1]), mean(x[labels == 1, 2]))
+centroid2 <- c(mean(x[labels == 2, 1]), mean(x[labels == 2, 2]))
+plot(x[,1], x[,2], col=(labels + 1), pch = 20, cex = 2)
+points(centroid1[1], centroid1[2], col = 2, pch = 4)
+points(centroid2[1], centroid2[2], col = 3, pch = 4)
+```
+
+
+4. (10 points) Assign each observation to the centroid to which it is closest, in terms of Euclidean distance. Report the cluster labels for each observation.
+
+```{r}
+labels <- c(2, 2, 2, 1, 1, 1)
+plot(x[, 1], x[, 2], col = (labels + 1), pch = 20, cex = 2)
+points(centroid1[1], centroid1[2], col = 2, pch = 4)
+points(centroid2[1], centroid2[2], col = 3, pch = 4)
+```
+
+
+5. (5 points) Repeat (3) and (4) until the answers/clusters stop changing.
+
+```{r}
+centroid1 <- c(mean(x[labels == 1, 1]), mean(x[labels == 1, 2]))
+centroid2 <- c(mean(x[labels == 2, 1]), mean(x[labels == 2, 2]))
+plot(x[,1], x[,2], col=(labels + 1), pch = 20, cex = 2)
+points(centroid1[1], centroid1[2], col = 2, pch = 4)
+points(centroid2[1], centroid2[2], col = 3, pch = 4)
+```
+
+##If we assign points to the centroid to which it is closest, nothing changes, so we can stop here.
+
+6. (10 points) Reproduce the original plot from (1), but this time color the observations *according to the clusters labels you obtained* by iterating the cluster centroid calculation and assignments. 
+
+```{r}
+set.seed(100)
+labels <- sample(2, nrow(x), replace = T)
+plot(x[, 1], x[, 2], col=(labels + 1), pch = 20, cex = 2)
+centroid1 <- c(mean(x[labels == 1, 1]), mean(x[labels == 1, 2]))
+centroid2 <- c(mean(x[labels == 2, 1]), mean(x[labels == 2, 2]))
+plot(x[, 1], x[, 2], col=(labels + 1), pch = 20, cex = 2)
+labels <- c(2, 2, 2, 1, 1, 1)
+plot(x[, 1], x[, 2], col = (labels + 1), pch = 20, cex = 2)
+centroid1 <- c(mean(x[labels == 1, 1]), mean(x[labels == 1, 2]))
+centroid2 <- c(mean(x[labels == 2, 1]), mean(x[labels == 2, 2]))
+plot(x[,1], x[,2], col=(labels + 1), pch = 20, cex = 2)
+```
+
+### Clustering State Legislative Professionalism
+
+1. Load the state legislative professionalism data. See the codebook (or above) for further reference.
+```{r}
+load("legprof.RData")
+prof <- x
+```
+
+2. (5 points) Munge the data: 
+
+a. select only the continuous features that should capture a state legislature’s level of “professionalism” (session length (total and regular), salary, and expenditures)
+b. restrict the data to only include the 2009/10 legislative session for consistency 
+c. omit all missing values
+d. standardize the input features;
+e. and anything else you think necessary to get this subset of data into workable form (hint: consider storing the state names as a separate object to be used in plotting later) 
+
+```{r}
+#Select: stateabv, t_slength, slength, salary_real + 2009/10 session
+prof <- subset(prof, sessid == '2009/10', select = c("stateabv", "t_slength", "slength", "salary_real", "expend"))
+
+#Remove missing data
+prof = prof[complete.cases(prof), ]
+
+#Store names
+prof_names <- subset(prof, select = "stateabv")
+
+#Prior to scaling the data, let's store the summary stats so that we will be able to see actual means, medians, standard deviations, etc.
+summary <- summary(prof)
+
+#Drop names + scale the numeric columns
+prof <- scale(subset(prof, select = c("t_slength", "slength", "salary_real", "expend")))
+
+```
+
+
+3. (5 points) Diagnose clusterability in any way you’d prefer (e.g., sparse sampling, ODI, etc.); display the results and discuss the likelihood that natural, non-random structure exist in these data. _Hint:_ We didn't cover how to do this R in class, but consider `dissplot()` from the `seriation` package, the `factoextra` package, and others for calculating, presenting, and exploring the clusterability of some feature space.
+
+```{r}
+library(seriation)
+#Calculate distance using our scaled df
+prof_dist <- dist(prof, method = "manhattan")
+dissplot(prof_dist)
+```
+
+##In the above ODI, there may be few squares emerging, but overall I do not have much confidence in the clustering of the data.
+ 
+4. (5 points) Fit an **agglomerative hierarchical** clustering algorithm using any linkage method you prefer, to these data and present the results. Give a quick, high level summary of the output and general patterns. 
+
+```{r}
+#Average Linkage
+prof_sub <- prof %>% dist()
+hc_average <- hclust(prof_sub, method = "average")
+plot(hc_average, hang = -1)
+```
+
+##The numbers are state names. We notice that at the right end, three states clustered by themselves (95, 399, 608). These are CA, MA and NY. These are all mega states so they may be more similar to each other. Southern states tend to stay together. 
+
+
+5. (5 points) Fit a **k-means** algorithm to these data and present the results. Give a quick, high level summary of the output and general patterns. Initialize the algorithm at `k = 2`, and then check this assumption in the validation questions below.
+
+```{r}
+kmeans <- kmeans(prof, centers = 2, nstart = 15)
+str(kmeans)
+```
+```{r}
+#let's save cluster assignments (add to the state names)
+library(factoextra)
+#Visualize the outcome of this clustering
+fviz_cluster(kmeans, prof)
+#let's save cluster assignments (add to the state names)
+prof_names$k_cluster = as.factor(kmeans$cluster)
+
+```
+
+##From the above, we can see that 6 states were put into one cluster, and the remaining 43 were placed intothe second cluster. Specifically, we can check that the states in the blue cluster were CA, MA, MI, NY, OH and PA.
+
+6. (5 points) Fit a **Gaussian mixture model via the EM algorithm** to these data and present the results. Give a quick, high level summary of the output and general patterns. Initialize the algorithm at `k = 2`, and then check this assumption in the validation questions below.
+
+```{r}
+set.seed(1234)
+gmm1 <- mvnormalmixEM(prof, k = 2)
+posterior <- data.frame(cbind(gmm1$x, gmm1$posterior))
+posterior$component <- ifelse(posterior$comp.1 > 0.5, 1, 2)
+head(posterior)
+table(posterior$component)
+#add to the df where we are collating the cluster assignments for later
+prof_names$gmm_cluster <- as.factor(posterior$component)
+```
+
+##We have one cluster that has 37 states and one which has 12 here, which is different than what we did kmeans. The probability scores of belonging to each component (comp.1 & comp.2) here are very high or low. While Gaussian models are a form of soft partitioning and thus it might be possible to belong to more than one cluster, here there seem to be very high or low probabilities for belonging to a cluster.
+
+7. (15 points) Compare output of all in visually useful, simple ways (e.g., present the dendrogram, plot by state cluster assignment across two features like salary and expenditures, etc.). There should be several plots of comparison and output.
+
+```{r}
+new_df <- cbind(prof_names, prof)
+head(new_df)
+```
+```{r}
+new_df %>%
+ggplot(aes(x = t_slength, y = salary_real, color = k_cluster)) +
+geom_point() +
+labs(x = "Total session length",
+y = "Legislator compensation",
+title = "Total session length vs. legislator compensation colored by k means cluster")
+
+```
+
+```{r}
+new_df %>%
+ggplot(aes(x = t_slength, y = salary_real, color = gmm_cluster)) +
+geom_point() +
+labs(x = "Total session length",
+y = "Legislator compensation",
+title = "Total session length vs. legislator compensation colored by gmm cluster")
+```
+
+##Both graphs suggest that there are groupings emerging with longer session length and higher compensation vs. lower compensation and shorter total session length. The Gaussian model has a few additional points within the lower compensation / session length that appear to be grouped with the higher compensation / higher total session length. In sum, if I think that total session length and legislature compensation are valid measures of “professionalism”. Kmeans cluster seem to do a better job of finding similar state legislatures. 
+
+8. (5 points) Select a *single* validation strategy (e.g., compactness via min(WSS), average silhouette width, etc.), and calculate for all three algorithms. Display and compare your results for all three algorithms you fit (hierarchical, k-means, GMM). _Hint:_ Here again, we didn't cover this in R in class, but think about using the `clValid` package, though there are many other packages and ways to validate cluster patterns across iterations.
+
+```{r}
+library(clValid)
+library(cluster)
+library(mclust)
+#Validate for hierarchical, kmeans and GMM
+internal <- clValid(prof, 2:5, clMethods = c("hierarchical", "kmeans","model"), validation = "internal")
+summary(internal)
+```
+
+
+9. (10 points) Discuss the validation output, e.g.,
+
+  * What can you take away from the fit? 
+  
+##We use internal validation to understand how well clustering algorithms perform relative to other algorithms. We compare 2-5 numbers of clusters and types of clustering to see which model is the best. we want high values for silhouette width and the Dunn index and low values on connectivity. Here, hierarchical is the strongest method of all three validation measures. 
+
+  * Which approach is optimal? And optimal at what value of k? 
+
+##In this specific case, hierarchical was the strongest performer across all three measures. For the connectivity and silhouette width, 2 clusters would be the optimal number, for Dunn index 3 clusters would be best.
+
+  * What are reasons you could imagine selecting a technically “sub-optimal” clustering method, regardless of the validation statistics? 
+
+##It depends on the real world senario, namely, what we want to do with our clustering. For example, if we only wants two clusters to focus on, then we may choose a sub-optimal clustering method regardless of the Dunn index. 
+
